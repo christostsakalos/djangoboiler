@@ -1,0 +1,77 @@
+
+version: '3.8'
+services:
+  app_api:
+    container_name: appbackend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+    ports:
+      - 8000:8000
+    depends_on:
+      - app_db
+
+  nginx:
+    build: ./webserver
+    ports:
+      - 1337:80
+    depends_on:
+      - app_api
+    restart: "on-failure"
+    
+
+  app_db:
+    container_name: app_db
+    image: 'postgres:9.5'
+    volumes:
+      - '.app_db:/var/lib/postgresql/data'
+    env_file:
+      - database.env # configure postgres
+    ports:
+      - '5432:5432'
+
+
+
+  redis:
+    image: redis:alpine
+    command: redis-server --requirepass devpassword
+    volumes:
+      - 'redis:/var/lib/redis/data'
+    ports:
+      - '6379:6379'
+
+
+  celery_worker:
+
+    command: "celery -A appbackend worker -l info"
+    container_name: celery_worker
+    build:
+      context: .
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 50M
+        reservations:
+          cpus: '0.25'
+          memory: 20M
+    hostname: celery_worker
+
+
+    restart: on-failure
+    depends_on:
+      - app_db
+      - redis
+      - app_api
+      - nginx
+
+
+volumes:
+  postgres:
+  redis:
+  webserver:
